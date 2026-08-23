@@ -24,8 +24,7 @@ app.use(helmet());
 
 // Configuration CORS
 const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://votre-app.vercel.app'] // Remplacez par votre URL Vercel après déploiement
-  : [
+  ? ['https://frontend-gestcom.vercel.app'] 
       'http://localhost:3000',
       'http://localhost:5173',
       'http://127.0.0.1:3000',
