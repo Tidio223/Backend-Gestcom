@@ -5,14 +5,10 @@ const mongoose = require('mongoose');
  */
 const connectDB = async () => {
   try {
-    // URI de connexion avec options supplémentaires
-    const uri = process.env.MONGODB_URI;
+    const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/gestcom';
     console.log('Tentative de connexion MongoDB avec URI:', uri.replace(/:([^:@]+)@/, ':***@'));
-    
-    const conn = await mongoose.connect(uri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+
+    const conn = await mongoose.connect(uri);
 
     console.log(`MongoDB connecté: ${conn.connection.host}`);
     console.log('Base de données:', conn.connection.name);

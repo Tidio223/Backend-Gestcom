@@ -9,6 +9,7 @@ const {
   getMe
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
+const { activityLogger } = require('../middlewares/activityLogger');
 
 const router = express.Router();
 
@@ -68,12 +69,12 @@ const forgotPasswordValidation = [
 
 // Routes publiques
 router.post('/register', registerValidation, register);
-router.post('/login', loginValidation, login);
+router.post('/login', loginValidation, activityLogger('login'), login);
 router.post('/forgot-password', forgotPasswordValidation, forgotPassword);
 router.post('/reset-password', resetPasswordValidation, resetPassword);
 
 // Routes protégées
-router.post('/logout', protect, logout);
+router.post('/logout', protect, activityLogger('logout'), logout);
 router.get('/me', protect, getMe);
 
 module.exports = router;

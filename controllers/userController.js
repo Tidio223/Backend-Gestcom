@@ -1,5 +1,75 @@
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
+const { logActivity } = require('../middlewares/activityLogger');
+
+/**
+ * @desc    Créer un utilisateur (admin seulement)
+ * @route   POST /api/users
+ * @access  Private/Admin
+ */
+const createUser = async (req, res, next) => {
+  try {
+    const { name, email, password, role } = req.body;
+
+    // Validation
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tous les champs sont obligatoires'
+      });
+    }
+
+    if (!['caissier', 'gerant', 'admin'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rôle invalide. Seuls caissier, gérant et admin sont autorisés'
+      });
+    }
+
+    // Vérifier si l'email existe déjà
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cet email est déjà utilisé'
+      });
+    }
+
+    // Créer l'utilisateur
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role,
+      status: 'active'
+    });
+
+    // Enregistrer l'activité de création
+    await logActivity(
+      req.user.id,
+      'create_user',
+      user._id,
+      `${req.user.name} a créé l'utilisateur ${name} (${email})`,
+      req.ip,
+      req.get('User-Agent')
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Utilisateur créé avec succès',
+      data: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 /**
  * @desc    Obtenir tous les utilisateurs (admin seulement)
@@ -110,7 +180,7 @@ const updateUserRole = async (req, res, next) => {
       });
     }
 
-    // Empêcher la modification du rôle du super admin (premier admin)
+    // Empêcher la modification du rôle du dernier administrateur
     if (user.role === 'admin' && req.user.id !== user.id.toString()) {
       const adminCount = await User.countDocuments({ role: 'admin' });
       if (adminCount <= 1) {
@@ -123,6 +193,16 @@ const updateUserRole = async (req, res, next) => {
 
     user.role = role;
     await user.save();
+
+    // Enregistrer l'activité de modification de rôle
+    await logActivity(
+      req.user.id,
+      'update_role',
+      user._id,
+      `${req.user.name} a modifié le rôle de ${user.name} (${user.email}) en ${role}`,
+      req.ip,
+      req.get('User-Agent')
+    );
 
     res.status(200).json({
       success: true,
@@ -155,7 +235,7 @@ const deleteUser = async (req, res, next) => {
       });
     }
 
-    // Empêcher la suppression du super admin (premier admin)
+    // Empêcher la suppression du dernier administrateur
     if (user.role === 'admin') {
       const adminCount = await User.countDocuments({ role: 'admin' });
       if (adminCount <= 1) {
@@ -174,7 +254,17 @@ const deleteUser = async (req, res, next) => {
       });
     }
 
-    await user.remove();
+    // Enregistrer l'activité de suppression
+    await logActivity(
+      req.user.id,
+      'delete_user',
+      user._id,
+      `${req.user.name} a supprimé l'utilisateur ${user.name} (${user.email})`,
+      req.ip,
+      req.get('User-Agent')
+    );
+
+    await User.deleteOne({ _id: user._id });
 
     res.status(200).json({
       success: true,
@@ -256,6 +346,67 @@ const updateUser = async (req, res, next) => {
 
 
 /**
+ * @desc    Bloquer un utilisateur
+ * @route   PATCH /api/users/:id/block
+ * @access  Private/Admin
+ */
+const blockUser = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+    if (user.role === 'admin') {
+      return res.status(400).json({ success: false, message: 'Impossible de bloquer un administrateur' });
+    }
+    // Enregistrer l'activité de blocage
+    await logActivity(
+      req.user.id,
+      'block_user',
+      user._id,
+      `${req.user.name} a bloqué l'utilisateur ${user.name} (${user.email})`,
+      req.ip,
+      req.get('User-Agent')
+    );
+
+    user.status = 'blocked';
+    await user.save();
+    res.status(200).json({ success: true, message: 'Utilisateur bloqué' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Débloquer un utilisateur
+ * @route   PATCH /api/users/:id/unblock
+ * @access  Private/Admin
+ */
+const unblockUser = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+    // Enregistrer l'activité de déblocage
+    await logActivity(
+      req.user.id,
+      'unblock_user',
+      user._id,
+      `${req.user.name} a débloqué l'utilisateur ${user.name} (${user.email})`,
+      req.ip,
+      req.get('User-Agent')
+    );
+
+    user.status = 'active';
+    await user.save();
+    res.status(200).json({ success: true, message: 'Utilisateur débloqué' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Obtenir les statistiques des utilisateurs
  * @route   GET /api/users/stats
  * @access  Private/Admin
@@ -298,10 +449,13 @@ const getUserStats = async (req, res, next) => {
 };
 
 module.exports = {
+  createUser,
   getUsers,
   getUser,
   updateUserRole,
   deleteUser,
   updateUser,
+  blockUser,
+  unblockUser,
   getUserStats
 };

@@ -32,6 +32,11 @@ const userSchema = new mongoose.Schema({
     enum: ['caissier', 'gerant', 'admin'],
     default: 'caissier'
   },
+  status: {
+    type: String,
+    enum: ['active', 'blocked'],
+    default: 'active'
+  },
   resetPasswordToken: String,
   resetPasswordExpire: Date,
   createdAt: {

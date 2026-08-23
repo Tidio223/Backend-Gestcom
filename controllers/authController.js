@@ -1,6 +1,30 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
+const { logActivity } = require('../middlewares/activityLogger');
+
+const useMockAuth = process.env.USE_MOCK_AUTH === 'true';
+
+const mockUsers = [
+  {
+    _id: 'mock-admin-1',
+    name: 'Administrateur',
+    email: 'admin@gestcom.com',
+    role: 'admin',
+    status: 'active',
+    password: 'admin123',
+  },
+  {
+    _id: 'mock-gerant-1',
+    name: 'Gérant',
+    email: 'gerant@gestcom.com',
+    role: 'gerant',
+    status: 'active',
+    password: 'gerant123',
+  },
+];
+
+const mockUserByEmail = (email) => mockUsers.find((user) => user.email === email);
 
 /**
  * @desc    Inscription d'un nouvel utilisateur
@@ -88,6 +112,34 @@ const login = async (req, res, next) => {
       });
     }
 
+    if (useMockAuth) {
+      const mockUser = mockUserByEmail(email);
+      if (!mockUser || mockUser.password !== password) {
+        return res.status(401).json({
+          success: false,
+          message: 'Email ou mot de passe incorrect'
+        });
+      }
+
+      const token = jwt.sign(
+        { id: mockUser._id },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRE }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: 'Connexion réussie',
+        data: {
+          id: mockUser._id,
+          name: mockUser.name,
+          email: mockUser.email,
+          role: mockUser.role,
+          token
+        }
+      });
+    }
+
     // Trouver l'utilisateur (avec le mot de passe)
     const user = await User.findOne({ email }).select('+password');
 
@@ -108,11 +160,29 @@ const login = async (req, res, next) => {
       });
     }
 
+    // Vérifier si l'utilisateur est bloqué
+    if (user.status === 'blocked') {
+      return res.status(403).json({
+        success: false,
+        message: 'Votre compte a été bloqué. Veuillez contacter l\'administrateur.'
+      });
+    }
+
     // Générer le token
     const token = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE }
+    );
+
+    // Enregistrer l'activité de connexion
+    await logActivity(
+      user._id,
+      'login',
+      null,
+      `${user.name} s'est connecté`,
+      req.ip,
+      req.get('User-Agent')
     );
 
     res.status(200).json({
@@ -137,6 +207,18 @@ const login = async (req, res, next) => {
  * @access  Private
  */
 const logout = async (req, res) => {
+  // Enregistrer l'activité de déconnexion
+  if (req.user) {
+    await logActivity(
+      req.user.id,
+      'logout',
+      null,
+      `${req.user.name} s'est déconnecté`,
+      req.ip,
+      req.get('User-Agent')
+    );
+  }
+
   res.status(200).json({
     success: true,
     message: 'Déconnexion réussie'
