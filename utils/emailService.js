@@ -1,11 +1,11 @@
 const nodemailer = require('nodemailer');
 
 /**
- * Configuration du transporteur d'email
+ * Configuration du transporteur d'email (Brevo/Sendinblue)
  */
 const createTransporter = () => {
   return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
     port: process.env.EMAIL_PORT || 587,
     secure: false,
     auth: {
@@ -25,8 +25,11 @@ const sendPasswordResetEmail = async (email, resetToken) => {
     // URL de réinitialisation (pointe vers la page de connexion avec le token en paramètre)
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:8080'}/auth?resetToken=${resetToken}`;
     
+    console.log('Tentative d\'envoi d\'email à:', email);
+    console.log('URL de réinitialisation:', resetUrl);
+    
     const mailOptions = {
-      from: `"GestCom" <${process.env.EMAIL_USER}>`,
+      from: `"GestCom" <bahcheick508@gmail.com>`,
       to: email,
       subject: 'Réinitialisation de votre mot de passe',
       html: `
@@ -48,7 +51,8 @@ const sendPasswordResetEmail = async (email, resetToken) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email envoyé avec succès:', info.response);
     return true;
   } catch (error) {
     console.error('Erreur lors de l\'envoi de l\'email:', error);
