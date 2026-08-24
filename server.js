@@ -19,6 +19,9 @@ connectDB().catch(() => {
 // Initialiser l'application Express
 const app = express();
 
+// Configuration trust proxy pour Render
+app.set('trust proxy', 1);
+
 // Middleware de sécurité
 app.use(helmet());
 
