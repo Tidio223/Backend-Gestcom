@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
 const { logActivity } = require('../middlewares/activityLogger');
+const { sendPasswordResetEmail } = require('../utils/emailService');
 
 const useMockAuth = process.env.USE_MOCK_AUTH === 'true';
 
@@ -255,14 +256,23 @@ const forgotPassword = async (req, res, next) => {
 
     await user.save({ validateBeforeSave: false });
 
-    // En production, envoyer un email avec le token
-    // Pour l'instant, on retourne le token (à adapter selon vos besoins)
+    // Envoyer l'email avec le token
+    const emailSent = await sendPasswordResetEmail(email, resetToken);
+
+    if (!emailSent) {
+      // Si l'email échoue, renvoyer le token pour le développement
+      return res.status(200).json({
+        success: true,
+        message: 'Token de réinitialisation généré (email non envoyé)',
+        data: {
+          resetToken // À retirer en production
+        }
+      });
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Token de réinitialisation généré',
-      data: {
-        resetToken // En production, ne pas renvoyer ce token
-      }
+      message: 'Email de réinitialisation envoyé avec succès'
     });
   } catch (error) {
     next(error);
