@@ -6,7 +6,9 @@ const {
   logout,
   forgotPassword,
   resetPassword,
-  getMe
+  getMe,
+  updateEmail,
+  updatePassword
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 const { activityLogger } = require('../middlewares/activityLogger');
@@ -67,6 +69,31 @@ const forgotPasswordValidation = [
     .withMessage('Veuillez fournir un email valide')
 ];
 
+/**
+ * Validation pour la mise à jour de l'email
+ */
+const updateEmailValidation = [
+  body('newEmail')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Veuillez fournir un email valide'),
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('Le mot de passe actuel est obligatoire')
+];
+
+/**
+ * Validation pour la mise à jour du mot de passe
+ */
+const updatePasswordValidation = [
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('Le mot de passe actuel est obligatoire'),
+  body('newPassword')
+    .isLength({ min: 6 })
+    .withMessage('Le nouveau mot de passe doit contenir au moins 6 caractères')
+];
+
 // Routes publiques
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, activityLogger('login'), login);
@@ -76,5 +103,7 @@ router.post('/reset-password', resetPasswordValidation, resetPassword);
 // Routes protégées
 router.post('/logout', protect, activityLogger('logout'), logout);
 router.get('/me', protect, getMe);
+router.post('/update-email', protect, updateEmailValidation, activityLogger('update_email'), updateEmail);
+router.post('/update-password', protect, updatePasswordValidation, activityLogger('update_password'), updatePassword);
 
 module.exports = router;

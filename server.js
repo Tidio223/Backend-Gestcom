@@ -104,6 +104,8 @@ if (require.main === module) {
     console.log('  POST /api/auth/forgot-password - Mot de passe oublié');
     console.log('  POST /api/auth/reset-password - Réinitialiser mot de passe');
     console.log('  GET  /api/auth/me - Profil utilisateur');
+    console.log('  POST /api/auth/update-email - Mettre à jour email');
+    console.log('  POST /api/auth/update-password - Mettre à jour mot de passe');
     console.log('  GET  /api/users - Liste utilisateurs (admin)');
     console.log('  GET  /api/users/stats - Stats utilisateurs (admin)');
     console.log('  GET  /api/users/:id - Détails utilisateur (admin)');

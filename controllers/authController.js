@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
 const { logActivity } = require('../middlewares/activityLogger');
-const { sendPasswordResetEmail } = require('../utils/emailService');
+const { sendPasswordResetEmail, sendEmailChangeConfirmation, sendPasswordChangeConfirmation } = require('../utils/emailService');
 
 const useMockAuth = process.env.USE_MOCK_AUTH === 'true';
 
@@ -355,11 +355,181 @@ const getMe = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Mettre à jour l'email de l'utilisateur
+ * @route   POST /api/auth/update-email
+ * @access  Private
+ */
+const updateEmail = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Données invalides',
+        errors: errors.array()
+      });
+    }
+
+    const { newEmail, currentPassword } = req.body;
+
+    if (useMockAuth) {
+      const mockUser = mockUsers.find(u => u._id === req.user.id);
+      if (!mockUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'Utilisateur non trouvé'
+        });
+      }
+
+      if (mockUser.password !== currentPassword) {
+        return res.status(401).json({
+          success: false,
+          message: 'Mot de passe actuel incorrect'
+        });
+      }
+
+      mockUser.email = newEmail;
+      return res.status(200).json({
+        success: true,
+        message: 'Adresse e-mail mise à jour avec succès',
+        data: {
+          email: newEmail
+        }
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+
+    // Vérifier le mot de passe actuel
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Mot de passe actuel incorrect'
+      });
+    }
+
+    // Vérifier si le nouvel email est déjà utilisé
+    const existingUser = await User.findOne({ email: newEmail });
+    if (existingUser && existingUser._id.toString() !== user._id.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cet email est déjà utilisé par un autre utilisateur'
+      });
+    }
+
+    // Sauvegarder l'ancien email avant la mise à jour
+    const oldEmail = user.email;
+
+    // Mettre à jour l'email
+    user.email = newEmail;
+    await user.save();
+
+    // Envoyer l'email de confirmation
+    await sendEmailChangeConfirmation(oldEmail, newEmail);
+
+    res.status(200).json({
+      success: true,
+      message: 'Adresse e-mail mise à jour avec succès',
+      data: {
+        email: newEmail
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Mettre à jour le mot de passe de l'utilisateur
+ * @route   POST /api/auth/update-password
+ * @access  Private
+ */
+const updatePassword = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Données invalides',
+        errors: errors.array()
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (useMockAuth) {
+      const mockUser = mockUsers.find(u => u._id === req.user.id);
+      if (!mockUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'Utilisateur non trouvé'
+        });
+      }
+
+      if (mockUser.password !== currentPassword) {
+        return res.status(401).json({
+          success: false,
+          message: 'Mot de passe actuel incorrect'
+        });
+      }
+
+      mockUser.password = newPassword;
+      return res.status(200).json({
+        success: true,
+        message: 'Mot de passe mis à jour avec succès'
+      });
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+
+    // Vérifier le mot de passe actuel
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Mot de passe actuel incorrect'
+      });
+    }
+
+    // Mettre à jour le mot de passe (le hashing est fait automatiquement par le pre-save hook)
+    user.password = newPassword;
+    await user.save();
+
+    // Envoyer l'email de confirmation
+    await sendPasswordChangeConfirmation(user.email);
+
+    res.status(200).json({
+      success: true,
+      message: 'Mot de passe mis à jour avec succès'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
   logout,
   forgotPassword,
   resetPassword,
-  getMe
+  getMe,
+  updateEmail,
+  updatePassword
 };
