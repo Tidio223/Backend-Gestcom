@@ -75,7 +75,8 @@ userSchema.pre('save', async function(next) {
  * Hook pre pour protéger les comptes privilégiés contre les modifications
  */
 userSchema.pre('save', function(next) {
-  if (this.isModified('role') || this.isModified('email') || this.isModified('status')) {
+  // Autoriser la création initiale (isNew)
+  if (!this.isNew && (this.isModified('role') || this.isModified('email') || this.isModified('status'))) {
     if (PROTECTED_EMAILS.includes(this.email)) {
       return next(new Error('Modification interdite : ce compte est protégé'));
     }

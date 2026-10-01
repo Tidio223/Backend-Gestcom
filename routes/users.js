@@ -17,6 +17,16 @@ const { preventProtectedRoleAssignment, protectAccounts, protectAccountDeletion 
 const router = express.Router();
 
 /**
+ * Validation pour la création d'utilisateur
+ */
+const createUserValidation = [
+  body('name').trim().notEmpty().withMessage('Le nom est obligatoire'),
+  body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
+  body('password').isLength({ min: 6 }).withMessage('Le mot de passe doit contenir au moins 6 caractères'),
+  body('role').isIn(['caissier', 'gerant']).withMessage('Rôle invalide')
+];
+
+/**
  * Validation pour la mise à jour du rôle
  */
 const updateRoleValidation = [
@@ -44,12 +54,7 @@ const updateProfileValidation = [
 ];
 
 // Routes admin et superadmin uniquement
-router.post('/', protect, authorize('admin', 'superadmin'), preventProtectedRoleAssignment, body([
-  body('name').trim().notEmpty().withMessage('Le nom est obligatoire'),
-  body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
-  body('password').isLength({ min: 6 }).withMessage('Le mot de passe doit contenir au moins 6 caractères'),
-  body('role').isIn(['caissier', 'gerant']).withMessage('Rôle invalide')
-]), createUser);
+router.post('/', protect, authorize('admin', 'superadmin'), preventProtectedRoleAssignment, createUserValidation, createUser);
 router.get('/', protect, authorize('admin', 'superadmin'), getUsers);
 router.get('/stats', protect, authorize('admin', 'superadmin'), getUserStats);
 router.get('/:id', protect, authorize('admin', 'superadmin'), getUser);
@@ -59,6 +64,6 @@ router.patch('/:id/unblock', protect, authorize('admin', 'superadmin'), protectA
 router.delete('/:id', protect, authorize('admin', 'superadmin'), protectAccountDeletion, deleteUser);
 
 // Routes utilisateur (admin ou utilisateur lui-même)
-router.put('/:id', protect, updateProfileValidation, updateUser);
+router.put('/:id', protect, protectAccounts, updateProfileValidation, updateUser);
 
 module.exports = router;

@@ -9,22 +9,17 @@ const { logActivity } = require('../middlewares/activityLogger');
  */
 const createUser = async (req, res, next) => {
   try {
+    // Validation des entrées
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Données invalides',
+        errors: errors.array()
+      });
+    }
+
     const { name, email, password, role } = req.body;
-
-    // Validation
-    if (!name || !email || !password || !role) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tous les champs sont obligatoires'
-      });
-    }
-
-    if (!['caissier', 'gerant', 'admin'].includes(role)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Rôle invalide. Seuls caissier, gérant et admin sont autorisés'
-      });
-    }
 
     // Vérifier si l'email existe déjà
     const existingUser = await User.findOne({ email });
@@ -294,8 +289,8 @@ const updateUser = async (req, res, next) => {
 
     const { name, email } = req.body;
 
-    // Seul l'utilisateur lui-même ou un admin peut modifier le profil
-    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+    // Seul l'utilisateur lui-même ou un admin/superadmin peut modifier le profil
+    if (req.user.id !== req.params.id && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Accès non autorisé'

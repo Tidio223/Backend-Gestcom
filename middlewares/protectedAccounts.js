@@ -35,11 +35,23 @@ const protectAccounts = (req, res, next) => {
   const userId = req.params.id;
   const { role, email, status } = req.body;
   
-  // Si on essaie de modifier le rôle, l'email ou le statut
-  if (role || email || status) {
+  // Si on essaie de modifier le rôle ou le statut
+  if (role || status) {
     // Vérifier si l'utilisateur cible est protégé
     User.findById(userId).then(user => {
       if (user && PROTECTED_EMAILS.includes(user.email)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Modification interdite : ce compte est protégé'
+        });
+      }
+      next();
+    }).catch(err => next(err));
+  } else if (email) {
+    // Si on modifie l'email, vérifier si l'utilisateur est protégé
+    // Mais permettre à l'utilisateur de modifier son propre email
+    User.findById(userId).then(user => {
+      if (user && PROTECTED_EMAILS.includes(user.email) && req.user.id !== userId) {
         return res.status(403).json({
           success: false,
           message: 'Modification interdite : ce compte est protégé'
