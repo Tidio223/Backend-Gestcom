@@ -4,7 +4,7 @@ const { validationResult } = require('express-validator');
 const { logActivity } = require('../middlewares/activityLogger');
 const { sendPasswordResetEmail, sendEmailChangeConfirmation, sendPasswordChangeConfirmation } = require('../utils/emailService');
 
-const useMockAuth = process.env.USE_MOCK_AUTH === 'true';
+const useMockAuth = process.env.NODE_ENV === 'development' && process.env.USE_MOCK_AUTH === 'true';
 
 const mockUsers = [
   {

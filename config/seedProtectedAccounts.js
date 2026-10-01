@@ -32,11 +32,8 @@ const seedProtectedAccounts = async () => {
       await newAdmin.save();
       console.log('Compte admin protégé créé:', adminEmail);
     } else {
-      // Forcer le rôle admin si différent
       if (adminUser.role !== 'admin') {
-        adminUser.role = 'admin';
-        await adminUser.save();
-        console.log('Rôle admin forcé pour:', adminEmail);
+        console.warn('ATTENTION: Le compte', adminEmail, 'existe mais n\'a pas le rôle admin. Rôle actuel:', adminUser.role);
       } else {
         console.log('Compte admin protégé existe déjà:', adminEmail);
       }
@@ -55,11 +52,8 @@ const seedProtectedAccounts = async () => {
       await newSuperadmin.save();
       console.log('Compte superadmin protégé créé:', superadminEmail);
     } else {
-      // Forcer le rôle superadmin si différent
       if (superadminUser.role !== 'superadmin') {
-        superadminUser.role = 'superadmin';
-        await superadminUser.save();
-        console.log('Rôle superadmin forcé pour:', superadminEmail);
+        console.warn('ATTENTION: Le compte', superadminEmail, 'existe mais n\'a pas le rôle superadmin. Rôle actuel:', superadminUser.role);
       } else {
         console.log('Compte superadmin protégé existe déjà:', superadminEmail);
       }
