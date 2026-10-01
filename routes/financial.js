@@ -89,11 +89,11 @@ const updateValidation = [
 ];
 
 // Routes
-router.get('/stats', protect, authorize('admin'), getFinancialStats);
-router.get('/transactions', protect, authorize('admin'), getTransactions);
-router.get('/transactions/:id', protect, authorize('admin'), getTransactionById);
-router.post('/transactions', protect, authorize('admin'), transactionValidation, createTransaction);
-router.put('/transactions/:id', protect, authorize('admin'), updateValidation, updateTransaction);
-router.delete('/transactions/:id', protect, authorize('admin'), deleteTransaction);
+router.get('/stats', protect, authorize('admin', 'superadmin'), getFinancialStats);
+router.get('/transactions', protect, authorize('admin', 'superadmin'), getTransactions);
+router.get('/transactions/:id', protect, authorize('admin', 'superadmin'), getTransactionById);
+router.post('/transactions', protect, authorize('admin', 'superadmin'), transactionValidation, createTransaction);
+router.put('/transactions/:id', protect, authorize('admin', 'superadmin'), updateValidation, updateTransaction);
+router.delete('/transactions/:id', protect, authorize('admin', 'superadmin'), deleteTransaction);
 
 module.exports = router;

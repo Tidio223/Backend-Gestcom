@@ -3,10 +3,12 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const mongoose = require('mongoose');
 const connectDB = require('./config/database');
 const errorHandler = require('./middlewares/error');
 const { getListenHost, getPort } = require('./config/serverConfig');
 const createAdmin = require('./config/seedAdmin');
+const seedProtectedAccounts = require('./config/seedProtectedAccounts');
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -93,7 +95,7 @@ const PORT = getPort();
 const HOST = getListenHost();
 
 if (require.main === module) {
-  const server = app.listen(PORT, HOST, async () => {
+  const server = app.listen(PORT, HOST, () => {
     console.log(`\nServeur démarré sur ${HOST}:${PORT}`);
     console.log(`Environnement: ${process.env.NODE_ENV}`);
     console.log(`API: http://${HOST}:${PORT}/api`);
@@ -111,9 +113,17 @@ if (require.main === module) {
     console.log('  GET  /api/users/:id - Détails utilisateur (admin)');
     console.log('  PUT  /api/users/:id/role - Modifier rôle (admin)');
     console.log('  DELETE /api/users/:id - Supprimer utilisateur (admin)');
+  });
 
-    // Créer l'administrateur par défaut
-    await createAdmin();
+  // Créer les comptes quand MongoDB est connecté
+  mongoose.connection.once('connected', async () => {
+    console.log('MongoDB connecté, création des comptes...');
+    try {
+      await createAdmin();
+      await seedProtectedAccounts();
+    } catch (error) {
+      console.error('Erreur lors de la création des comptes:', error);
+    }
   });
 
   // Gérer les rejets de promesses non gérés

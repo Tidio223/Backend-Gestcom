@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+// Emails des comptes protégés (définis via variables d'environnement)
+const PROTECTED_EMAILS = [
+  process.env.ADMIN_EMAIL,
+  process.env.SUPERADMIN_EMAIL
+].filter(Boolean);
+
 /**
  * Schéma utilisateur pour la base de données
  */
@@ -29,7 +35,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['caissier', 'gerant', 'admin'],
+    enum: ['caissier', 'gerant', 'admin', 'superadmin'],
     default: 'caissier'
   },
   status: {
@@ -63,6 +69,98 @@ userSchema.pre('save', async function(next) {
   } catch (error) {
     next(error);
   }
+});
+
+/**
+ * Hook pre pour protéger les comptes privilégiés contre les modifications
+ */
+userSchema.pre('save', function(next) {
+  if (this.isModified('role') || this.isModified('email') || this.isModified('status')) {
+    if (PROTECTED_EMAILS.includes(this.email)) {
+      return next(new Error('Modification interdite : ce compte est protégé'));
+    }
+  }
+  next();
+});
+
+/**
+ * Hook pre pour protéger les comptes privilégiés contre les modifications via updateOne
+ */
+userSchema.pre('updateOne', function(next) {
+  const update = this.getUpdate();
+  if (update && (update.role || update.email || update.status)) {
+    const query = this.getQuery();
+    if (query.email && PROTECTED_EMAILS.includes(query.email)) {
+      return next(new Error('Modification interdite : ce compte est protégé'));
+    }
+  }
+  next();
+});
+
+/**
+ * Hook pre pour protéger les comptes privilégiés contre les modifications via findOneAndUpdate
+ */
+userSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate();
+  if (update && (update.role || update.email || update.status)) {
+    const query = this.getQuery();
+    if (query.email && PROTECTED_EMAILS.includes(query.email)) {
+      return next(new Error('Modification interdite : ce compte est protégé'));
+    }
+  }
+  next();
+});
+
+/**
+ * Hook pre pour protéger les comptes privilégiés contre les modifications via findByIdAndUpdate
+ */
+userSchema.pre('findByIdAndUpdate', function(next) {
+  const update = this.getUpdate();
+  if (update && (update.role || update.email || update.status)) {
+    // Vérifier si l'utilisateur est protégé
+    User.findById(this.getQuery()._id).then(user => {
+      if (user && PROTECTED_EMAILS.includes(user.email)) {
+        return next(new Error('Modification interdite : ce compte est protégé'));
+      }
+      next();
+    }).catch(err => next(err));
+  } else {
+    next();
+  }
+});
+
+/**
+ * Hook pre pour protéger les comptes privilégiés contre la suppression via deleteOne
+ */
+userSchema.pre('deleteOne', function(next) {
+  const query = this.getQuery();
+  if (query.email && PROTECTED_EMAILS.includes(query.email)) {
+    return next(new Error('Suppression interdite : ce compte est protégé'));
+  }
+  next();
+});
+
+/**
+ * Hook pre pour protéger les comptes privilégiés contre la suppression via findOneAndDelete
+ */
+userSchema.pre('findOneAndDelete', function(next) {
+  const query = this.getQuery();
+  if (query.email && PROTECTED_EMAILS.includes(query.email)) {
+    return next(new Error('Suppression interdite : ce compte est protégé'));
+  }
+  next();
+});
+
+/**
+ * Hook pre pour protéger les comptes privilégiés contre la suppression via findByIdAndDelete
+ */
+userSchema.pre('findByIdAndDelete', function(next) {
+  User.findById(this.getQuery()._id).then(user => {
+    if (user && PROTECTED_EMAILS.includes(user.email)) {
+      return next(new Error('Suppression interdite : ce compte est protégé'));
+    }
+    next();
+  }).catch(err => next(err));
 });
 
 /**

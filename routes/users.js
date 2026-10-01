@@ -12,6 +12,7 @@ const {
   getUserStats
 } = require('../controllers/userController');
 const { protect, authorize } = require('../middlewares/auth');
+const { preventProtectedRoleAssignment, protectAccounts, protectAccountDeletion } = require('../middlewares/protectedAccounts');
 
 const router = express.Router();
 
@@ -20,8 +21,8 @@ const router = express.Router();
  */
 const updateRoleValidation = [
   body('role')
-    .isIn(['caissier', 'gerant', 'admin'])
-    .withMessage('Le rôle doit être "caissier", "gerant" ou "admin"')
+    .isIn(['caissier', 'gerant'])
+    .withMessage('Le rôle doit être "caissier" ou "gerant"')
 ];
 
 /**
@@ -42,20 +43,20 @@ const updateProfileValidation = [
     .withMessage('Veuillez fournir un email valide')
 ];
 
-// Routes admin uniquement
-router.post('/', protect, authorize('admin'), body([
+// Routes admin et superadmin uniquement
+router.post('/', protect, authorize('admin', 'superadmin'), preventProtectedRoleAssignment, body([
   body('name').trim().notEmpty().withMessage('Le nom est obligatoire'),
   body('email').isEmail().normalizeEmail().withMessage('Email invalide'),
   body('password').isLength({ min: 6 }).withMessage('Le mot de passe doit contenir au moins 6 caractères'),
-  body('role').isIn(['caissier', 'gerant', 'admin']).withMessage('Rôle invalide')
+  body('role').isIn(['caissier', 'gerant']).withMessage('Rôle invalide')
 ]), createUser);
-router.get('/', protect, authorize('admin'), getUsers);
-router.get('/stats', protect, authorize('admin'), getUserStats);
-router.get('/:id', protect, authorize('admin'), getUser);
-router.put('/:id/role', protect, authorize('admin'), updateRoleValidation, updateUserRole);
-router.patch('/:id/block', protect, authorize('admin'), blockUser);
-router.patch('/:id/unblock', protect, authorize('admin'), unblockUser);
-router.delete('/:id', protect, authorize('admin'), deleteUser);
+router.get('/', protect, authorize('admin', 'superadmin'), getUsers);
+router.get('/stats', protect, authorize('admin', 'superadmin'), getUserStats);
+router.get('/:id', protect, authorize('admin', 'superadmin'), getUser);
+router.put('/:id/role', protect, authorize('admin', 'superadmin'), preventProtectedRoleAssignment, protectAccounts, updateRoleValidation, updateUserRole);
+router.patch('/:id/block', protect, authorize('admin', 'superadmin'), protectAccounts, blockUser);
+router.patch('/:id/unblock', protect, authorize('admin', 'superadmin'), protectAccounts, unblockUser);
+router.delete('/:id', protect, authorize('admin', 'superadmin'), protectAccountDeletion, deleteUser);
 
 // Routes utilisateur (admin ou utilisateur lui-même)
 router.put('/:id', protect, updateProfileValidation, updateUser);

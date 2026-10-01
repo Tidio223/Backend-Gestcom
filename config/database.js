@@ -8,14 +8,16 @@ const connectDB = async () => {
     const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/gestcom';
     console.log('Tentative de connexion MongoDB avec URI:', uri.replace(/:([^:@]+)@/, ':***@'));
 
-    const conn = await mongoose.connect(uri);
+    const conn = await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
 
     console.log(`MongoDB connecté: ${conn.connection.host}`);
     console.log('Base de données:', conn.connection.name);
   } catch (error) {
     console.error('Erreur de connexion à MongoDB:', error.message);
-    console.error('Détails de l\'erreur:', error);
-    process.exit(1);
+    console.warn('Le serveur continuera en mode dégradé. Les comptes protégés ne seront pas créés.');
   }
 };
 

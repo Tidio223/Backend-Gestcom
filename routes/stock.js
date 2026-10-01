@@ -35,10 +35,10 @@ const movementValidation = [
     .trim()
 ];
 
-// Routes pour les mouvements de stock (gerant et admin uniquement)
-router.post('/movements', protect, authorize('admin', 'gerant'), movementValidation, createStockMovement);
-router.get('/movements', protect, authorize('admin', 'gerant'), getStockMovements);
-router.get('/movements/product/:productId', protect, authorize('admin', 'gerant'), getProductMovements);
-router.get('/stats', protect, authorize('admin', 'gerant'), getStockStats);
+// Routes pour les mouvements de stock (superadmin, admin et gerant uniquement)
+router.post('/movements', protect, authorize('admin', 'superadmin', 'gerant'), movementValidation, createStockMovement);
+router.get('/movements', protect, authorize('admin', 'superadmin', 'gerant'), getStockMovements);
+router.get('/movements/product/:productId', protect, authorize('admin', 'superadmin', 'gerant'), getProductMovements);
+router.get('/stats', protect, authorize('admin', 'superadmin', 'gerant'), getStockStats);
 
 module.exports = router;
