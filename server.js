@@ -28,22 +28,27 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 // Configuration CORS
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://frontend-gestcom.vercel.app']
-  : [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:5173',
-      'http://localhost:8080',
-      'http://127.0.0.1:8080',
-      'http://localhost:8081',
-      'http://127.0.0.1:8081',
-    ];
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://localhost:8080',
+  'http://127.0.0.1:8080',
+  'http://localhost:8081',
+  'http://127.0.0.1:8081',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
 app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
+  origin: (origin, callback) => {
+    // Requêtes sans origine (curl, Postman) ou origines autorisées
+    if (!origin || allowedOrigins.includes(origin) || /^https:\/\/frontend-gestcom.*\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("Origine non autorisée par CORS"));
+  },
+  credentials: true,
 }));
 
 // Limiter le nombre de requêtes (rate limiting)
