@@ -13,9 +13,24 @@ const productSchema = new mongoose.Schema({
     trim: true,
     enum: ['électronique', 'alimentation', 'vêtements', 'maison', 'autres']
   },
+  // Prix de gros (obligatoire pour les nouveaux produits)
+  prixGros: {
+    type: Number,
+    required: false,
+    min: [0, 'Le prix de gros ne peut pas être négatif'],
+    default: 0
+  },
+  // Prix de détail (obligatoire pour les nouveaux produits)
+  prixDetail: {
+    type: Number,
+    required: false,
+    min: [0, 'Le prix de détail ne peut pas être négatif'],
+    default: 0
+  },
+  // Ancien champ price gardé pour compatibilité
   price: {
     type: Number,
-    required: [true, 'Le prix est obligatoire'],
+    required: false,
     min: [0, 'Le prix ne peut pas être négatif']
   },
   stock: {

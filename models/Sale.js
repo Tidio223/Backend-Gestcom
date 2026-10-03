@@ -33,6 +33,12 @@ const saleSchema = new mongoose.Schema({
     required: [true, 'Le nom du client est obligatoire'],
     trim: true
   },
+  typeVente: {
+    type: String,
+    enum: ['gros', 'detail'],
+    default: 'detail',
+    required: true
+  },
   items: {
     type: [saleItemSchema],
     required: true,

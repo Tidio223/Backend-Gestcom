@@ -9,15 +9,29 @@ const { logActivity } = require('../middlewares/activityLogger');
  */
 const createProduct = async (req, res, next) => {
   try {
-    const { name, category, price, stock, minStock, description, barcode, supplier } = req.body;
+    const { name, category, price, prixGros, prixDetail, stock, minStock, description, barcode, supplier } = req.body;
 
     // Validation
-    if (!name || !category || !price) {
+    if (!name || !category) {
       return res.status(400).json({
         success: false,
-        message: 'Nom, catégorie et prix sont obligatoires'
+        message: 'Nom et catégorie sont obligatoires'
       });
     }
+
+    // Validation des prix
+    if (!prixGros && !prixDetail && !price) {
+      return res.status(400).json({
+        success: false,
+        message: 'Au moins un prix (gros, détail ou ancien) est obligatoire'
+      });
+    }
+
+    // Pour les nouveaux produits, prixGros et prixDetail sont obligatoires
+    // Pour la compatibilité, si seul price est fourni, l'utiliser pour les deux
+    const finalPrixGros = prixGros || price || 0;
+    const finalPrixDetail = prixDetail || price || 0;
+    const finalPrice = price || prixDetail || 0; // Garder price pour compatibilité
 
     // Vérifier si le code-barres existe déjà
     if (barcode) {
@@ -34,7 +48,9 @@ const createProduct = async (req, res, next) => {
     const product = await Product.create({
       name,
       category,
-      price,
+      price: finalPrice,
+      prixGros: finalPrixGros,
+      prixDetail: finalPrixDetail,
       stock: stock || 0,
       minStock: minStock || 10,
       description,
@@ -147,7 +163,7 @@ const getProduct = async (req, res, next) => {
  */
 const updateProduct = async (req, res, next) => {
   try {
-    const { name, category, price, stock, minStock, description, barcode, supplier, status } = req.body;
+    const { name, category, price, prixGros, prixDetail, stock, minStock, description, barcode, supplier, status } = req.body;
 
     let product = await Product.findById(req.params.id);
 
@@ -172,7 +188,20 @@ const updateProduct = async (req, res, next) => {
     // Mettre à jour les champs
     if (name) product.name = name;
     if (category) product.category = category;
+    
+    // Gestion des prix avec compatibilité
+    if (prixGros !== undefined) product.prixGros = prixGros;
+    if (prixDetail !== undefined) product.prixDetail = prixDetail;
     if (price !== undefined) product.price = price;
+    
+    // Si prixGros ou prixDetail sont fournis mais pas l'autre, utiliser price comme fallback
+    if (prixGros !== undefined && prixDetail === undefined && !product.prixDetail) {
+      product.prixDetail = price || prixGros;
+    }
+    if (prixDetail !== undefined && prixGros === undefined && !product.prixGros) {
+      product.prixGros = price || prixDetail;
+    }
+    
     if (stock !== undefined) product.stock = stock;
     if (minStock !== undefined) product.minStock = minStock;
     if (description !== undefined) product.description = description;
@@ -253,9 +282,12 @@ const getProductStats = async (req, res, next) => {
     });
     const outOfStockProducts = await Product.countDocuments({ stock: 0 });
 
-    // Valeur totale du stock
+    // Valeur totale du stock (utiliser prixDetail par défaut)
     const products = await Product.find({ status: 'active' });
-    const totalStockValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
+    const totalStockValue = products.reduce((sum, p) => {
+      const priceToUse = p.prixDetail || p.prixGros || p.price || 0;
+      return sum + (priceToUse * p.stock);
+    }, 0);
 
     res.status(200).json({
       success: true,

@@ -20,7 +20,15 @@ const createSale = async (req, res, next) => {
       });
     }
 
-    const { customer, items } = req.body;
+    const { customer, items, typeVente = 'detail' } = req.body;
+
+    // Valider le type de vente
+    if (!['gros', 'detail'].includes(typeVente)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Type de vente invalide. Doit être "gros" ou "detail"'
+      });
+    }
 
     // Vérifier que les articles existent et ont assez de stock
     for (const item of items) {
@@ -38,6 +46,22 @@ const createSale = async (req, res, next) => {
           message: `Stock insuffisant pour ${product.name}. Quantité demandée: ${item.quantity}, Stock disponible: ${product.stock}`
         });
       }
+
+      // Déterminer le prix à utiliser selon le type de vente
+      const priceToUse = typeVente === 'gros' 
+        ? (product.prixGros || product.price || 0)
+        : (product.prixDetail || product.price || 0);
+
+      if (priceToUse === 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Prix non défini pour ${product.name} pour le type de vente ${typeVente}`
+        });
+      }
+
+      // Mettre à jour le prix unitaire et le total
+      item.unitPrice = priceToUse;
+      item.total = item.quantity * priceToUse;
     }
 
     // Calculer le total
@@ -46,6 +70,7 @@ const createSale = async (req, res, next) => {
     // Créer la vente
     const sale = await Sale.create({
       customer,
+      typeVente,
       items,
       total,
       createdBy: req.user.id
@@ -63,7 +88,7 @@ const createSale = async (req, res, next) => {
         productName: item.productName,
         quantity: -item.quantity,
         type: 'sortie',
-        reason: 'Vente',
+        reason: `Vente ${typeVente}`,
         referenceId: sale._id,
         referenceType: 'Sale',
         performedBy: req.user.id
@@ -75,7 +100,7 @@ const createSale = async (req, res, next) => {
       req.user.id,
       'create_sale',
       sale._id,
-      `${req.user.name} a créé une vente pour ${customer} (${total} FCFA)`,
+      `${req.user.name} a créé une vente ${typeVente} pour ${customer} (${total} FCFA)`,
       req.ip,
       req.get('User-Agent')
     );
@@ -106,6 +131,11 @@ const getSales = async (req, res, next) => {
     // Filtre par statut
     if (req.query.status) {
       query.status = req.query.status;
+    }
+
+    // Filtre par type de vente
+    if (req.query.typeVente) {
+      query.typeVente = req.query.typeVente;
     }
 
     // Filtre par date
