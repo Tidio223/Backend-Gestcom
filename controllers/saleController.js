@@ -78,20 +78,24 @@ const createSale = async (req, res, next) => {
 
     // Mettre à jour le stock des produits
     for (const item of items) {
+      const product = await Product.findById(item.productId);
+      const previousStock = product.stock;
+      const newStock = previousStock - item.quantity;
+
       await Product.findByIdAndUpdate(item.productId, {
         $inc: { stock: -item.quantity }
       });
 
       // Enregistrer le mouvement de stock
       await StockMovement.create({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: -item.quantity,
-        type: 'sortie',
+        product: item.productId,
+        type: 'exit',
+        quantity: item.quantity,
+        previousStock: previousStock,
+        newStock: newStock,
         reason: `Vente ${typeVente}`,
-        referenceId: sale._id,
-        referenceType: 'Sale',
-        performedBy: req.user.id
+        user: req.user.id,
+        reference: sale._id.toString()
       });
     }
 

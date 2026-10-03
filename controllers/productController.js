@@ -9,7 +9,7 @@ const { logActivity } = require('../middlewares/activityLogger');
  */
 const createProduct = async (req, res, next) => {
   try {
-    const { name, category, price, prixGros, prixDetail, stock, minStock, description, barcode, supplier } = req.body;
+    const { name, category, price, prixGros, prixDetail, stock, minStock, unit, description, barcode, supplier } = req.body;
 
     // Validation
     if (!name || !category) {
@@ -53,6 +53,7 @@ const createProduct = async (req, res, next) => {
       prixDetail: finalPrixDetail,
       stock: stock || 0,
       minStock: minStock || 10,
+      unit: unit || 'unité',
       description,
       barcode,
       supplier,
@@ -163,7 +164,7 @@ const getProduct = async (req, res, next) => {
  */
 const updateProduct = async (req, res, next) => {
   try {
-    const { name, category, price, prixGros, prixDetail, stock, minStock, description, barcode, supplier, status } = req.body;
+    const { name, category, price, prixGros, prixDetail, stock, minStock, unit, description, barcode, supplier, status } = req.body;
 
     let product = await Product.findById(req.params.id);
 
@@ -204,6 +205,7 @@ const updateProduct = async (req, res, next) => {
     
     if (stock !== undefined) product.stock = stock;
     if (minStock !== undefined) product.minStock = minStock;
+    if (unit !== undefined) product.unit = unit;
     if (description !== undefined) product.description = description;
     if (barcode !== undefined) product.barcode = barcode;
     if (supplier !== undefined) product.supplier = supplier;
