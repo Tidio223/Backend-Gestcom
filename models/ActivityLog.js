@@ -9,7 +9,7 @@ const activityLogSchema = new mongoose.Schema({
   action: {
     type: String,
     required: true,
-    enum: ['login', 'logout', 'create_user', 'delete_user', 'update_role', 'block_user', 'unblock_user', 'update_profile', 'update_email', 'update_password', 'create_product', 'update_product', 'delete_product', 'create_sale', 'update_sale', 'delete_sale']
+    enum: ['login', 'logout', 'create_user', 'delete_user', 'update_role', 'block_user', 'unblock_user', 'update_profile', 'update_email', 'update_password', 'create_product', 'update_product', 'delete_product', 'create_sale', 'update_sale', 'delete_sale', 'create_invoice', 'update_invoice', 'delete_invoice']
   },
   targetUser: {
     type: mongoose.Schema.Types.ObjectId,

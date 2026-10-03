@@ -1,6 +1,7 @@
 const Sale = require('../models/Sale');
 const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
+const Invoice = require('../models/Invoice');
 const { validationResult } = require('express-validator');
 const { logActivity } = require('../middlewares/activityLogger');
 
@@ -109,10 +110,29 @@ const createSale = async (req, res, next) => {
       req.get('User-Agent')
     );
 
+    // Générer automatiquement la facture
+    const currentYear = new Date().getFullYear();
+    const invoiceCount = await Invoice.countDocuments({
+      number: new RegExp(`^FAC-${currentYear}-`)
+    });
+    const invoiceNumber = `FAC-${currentYear}-${String(invoiceCount + 1).padStart(3, '0')}`;
+
+    const invoice = await Invoice.create({
+      number: invoiceNumber,
+      client: customer,
+      date: sale.createdAt,
+      items: sale.items,
+      total: total,
+      status: 'pending',
+      typeVente: typeVente,
+      saleId: sale._id,
+      createdBy: req.user.id
+    });
+
     res.status(201).json({
       success: true,
       message: 'Vente créée avec succès',
-      data: sale
+      data: { sale, invoice }
     });
   } catch (error) {
     next(error);

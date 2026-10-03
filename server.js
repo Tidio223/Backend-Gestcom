@@ -73,6 +73,7 @@ app.use('/api/activity', require('./routes/activity'));
 app.use('/api/stock', require('./routes/stock'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/sales', require('./routes/sales'));
+app.use('/api/invoices', require('./routes/invoices'));
 app.use('/api/financial', require('./routes/financial'));
 
 // Route de test
