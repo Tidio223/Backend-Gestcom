@@ -9,8 +9,8 @@ const {
 const router = express.Router();
 
 // Routes pour le journal d'activité
-router.get('/', protect, authorize('admin'), getActivityLogs);
-router.get('/stats', protect, authorize('admin'), getActivityStats);
+router.get('/', protect, authorize('admin', 'superadmin'), getActivityLogs);
+router.get('/stats', protect, authorize('admin', 'superadmin'), getActivityStats);
 router.post('/', protect, createActivityLog);
 
 module.exports = router;
