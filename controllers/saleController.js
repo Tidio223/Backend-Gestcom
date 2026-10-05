@@ -123,7 +123,7 @@ const createSale = async (req, res, next) => {
       date: sale.createdAt,
       items: sale.items,
       total: total,
-      status: 'pending',
+      status: 'paid',
       typeVente: typeVente,
       saleId: sale._id,
       createdBy: req.user.id
