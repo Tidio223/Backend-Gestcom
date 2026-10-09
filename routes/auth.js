@@ -8,7 +8,8 @@ const {
   resetPassword,
   getMe,
   updateEmail,
-  updatePassword
+  updatePassword,
+  refreshToken
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 const { activityLogger } = require('../middlewares/activityLogger');
@@ -99,6 +100,7 @@ router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, activityLogger('login'), login);
 router.post('/forgot-password', forgotPasswordValidation, forgotPassword);
 router.post('/reset-password', resetPasswordValidation, resetPassword);
+router.post('/refresh', refreshToken);
 
 // Routes protégées
 router.post('/logout', protect, activityLogger('logout'), logout);

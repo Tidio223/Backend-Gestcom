@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/User');
+const RefreshToken = require('../models/RefreshToken');
 const { validationResult } = require('express-validator');
 const { logActivity } = require('../middlewares/activityLogger');
 const { sendPasswordResetEmail, sendEmailChangeConfirmation, sendPasswordChangeConfirmation } = require('../utils/emailService');
@@ -26,6 +28,81 @@ const mockUsers = [
 ];
 
 const mockUserByEmail = (email) => mockUsers.find((user) => user.email === email);
+
+/**
+ * Générer un token de rafraîchissement
+ */
+const generateRefreshToken = async (userId) => {
+  const token = crypto.randomBytes(64).toString('hex');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 jours
+
+  await RefreshToken.create({
+    user: userId,
+    token,
+    expiresAt
+  });
+
+  return token;
+};
+
+/**
+ * @desc    Rafraîchir le token d'accès
+ * @route   POST /api/auth/refresh
+ * @access  Public
+ */
+const refreshToken = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token requis'
+      });
+    }
+
+    // Vérifier le refresh token dans la base de données
+    const tokenDoc = await RefreshToken.findOne({ token: refreshToken });
+
+    if (!tokenDoc) {
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token invalide'
+      });
+    }
+
+    if (tokenDoc.expiresAt < new Date()) {
+      await RefreshToken.findByIdAndDelete(tokenDoc._id);
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token expiré'
+      });
+    }
+
+    // Générer un nouveau token d'accès
+    const accessToken = jwt.sign(
+      { id: tokenDoc.user },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRE }
+    );
+
+    // Générer un nouveau refresh token
+    const newRefreshToken = await generateRefreshToken(tokenDoc.user);
+
+    // Supprimer l'ancien refresh token
+    await RefreshToken.findByIdAndDelete(tokenDoc._id);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        token: accessToken,
+        refreshToken: newRefreshToken
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 /**
  * @desc    Inscription d'un nouvel utilisateur
@@ -69,7 +146,19 @@ const register = async (req, res, next) => {
       { expiresIn: process.env.JWT_EXPIRE }
     );
 
-    // Renvoyer les données (sans le mot de passe)
+    // Générer le refresh token
+    const refreshToken = await generateRefreshToken(user._id);
+
+    // Enregistrer l'activité de connexion
+    await logActivity(
+      user._id,
+      'login',
+      null,
+      `${user.name} s'est connecté`,
+      req.ip,
+      req.get('User-Agent')
+    );
+
     res.status(201).json({
       success: true,
       message: 'Inscription réussie',
@@ -78,7 +167,8 @@ const register = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        token
+        token,
+        refreshToken
       }
     });
   } catch (error) {
@@ -176,6 +266,9 @@ const login = async (req, res, next) => {
       { expiresIn: process.env.JWT_EXPIRE }
     );
 
+    // Générer le refresh token
+    const refreshToken = await generateRefreshToken(user._id);
+
     // Enregistrer l'activité de connexion
     await logActivity(
       user._id,
@@ -186,6 +279,7 @@ const login = async (req, res, next) => {
       req.get('User-Agent')
     );
 
+    // Toujours envoyer le token (localStorage en dev + prod)
     res.status(200).json({
       success: true,
       message: 'Connexion réussie',
@@ -194,7 +288,8 @@ const login = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        token
+        token,
+        refreshToken
       }
     });
   } catch (error) {
@@ -208,17 +303,18 @@ const login = async (req, res, next) => {
  * @access  Private
  */
 const logout = async (req, res) => {
+  // Supprimer tous les refresh tokens de l'utilisateur
+  await RefreshToken.deleteMany({ user: req.user.id });
+
   // Enregistrer l'activité de déconnexion
-  if (req.user) {
-    await logActivity(
-      req.user.id,
-      'logout',
-      null,
-      `${req.user.name} s'est déconnecté`,
-      req.ip,
-      req.get('User-Agent')
-    );
-  }
+  await logActivity(
+    req.user.id,
+    'logout',
+    null,
+    `${req.user.name} s'est déconnecté`,
+    req.ip,
+    req.get('User-Agent')
+  );
 
   res.status(200).json({
     success: true,
@@ -338,7 +434,7 @@ const resetPassword = async (req, res, next) => {
  */
 const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id).select('-password');
 
     res.status(200).json({
       success: true,
@@ -531,5 +627,6 @@ module.exports = {
   resetPassword,
   getMe,
   updateEmail,
-  updatePassword
+  updatePassword,
+  refreshToken
 };

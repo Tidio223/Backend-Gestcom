@@ -30,8 +30,8 @@ const saleItemSchema = new mongoose.Schema({
 const saleSchema = new mongoose.Schema({
   customer: {
     type: String,
-    required: [true, 'Le nom du client est obligatoire'],
-    trim: true
+    trim: true,
+    default: 'Client anonyme'
   },
   typeVente: {
     type: String,

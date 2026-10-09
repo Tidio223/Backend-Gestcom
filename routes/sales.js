@@ -5,9 +5,10 @@ const {
   getSales,
   getSale,
   updateSaleStatus,
-  getSalesStats
+  getSalesStats,
+  deleteSale
 } = require('../controllers/saleController');
-const { protect, authorize } = require('../middlewares/auth');
+const { protect, authorize, requireSuperAdmin } = require('../middlewares/auth');
 
 const router = express.Router();
 
@@ -16,9 +17,10 @@ const router = express.Router();
  */
 const createSaleValidation = [
   body('customer')
+    .optional()
     .trim()
     .notEmpty()
-    .withMessage('Le nom du client est obligatoire'),
+    .withMessage('Le nom du client ne peut pas être vide si fourni'),
   body('items')
     .isArray({ min: 1 })
     .withMessage('Une vente doit contenir au moins un article'),
@@ -33,9 +35,11 @@ const createSaleValidation = [
     .isInt({ min: 1 })
     .withMessage('La quantité doit être au moins 1'),
   body('items.*.unitPrice')
+    .optional()
     .isFloat({ min: 0 })
     .withMessage('Le prix unitaire doit être positif'),
   body('items.*.total')
+    .optional()
     .isFloat({ min: 0 })
     .withMessage('Le total doit être positif')
 ];
@@ -48,5 +52,8 @@ router.get('/:id', protect, getSale);
 
 // Routes admin uniquement
 router.patch('/:id/status', protect, authorize('admin', 'superadmin'), updateSaleStatus);
+
+// Routes super admin uniquement pour la suppression
+router.delete('/:id', protect, requireSuperAdmin, deleteSale);
 
 module.exports = router;

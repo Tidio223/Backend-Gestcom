@@ -1,4 +1,4 @@
-const getListenHost = () => process.env.HOST || '127.0.0.1';
+const getListenHost = () => process.env.HOST || '0.0.0.0';
 
 const getPort = () => Number(process.env.PORT || 5001);
 

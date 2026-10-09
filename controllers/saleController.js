@@ -4,6 +4,8 @@ const StockMovement = require('../models/StockMovement');
 const Invoice = require('../models/Invoice');
 const { validationResult } = require('express-validator');
 const { logActivity } = require('../middlewares/activityLogger');
+const { upsertInventory } = require('./inventoryController');
+const { upsertReport } = require('./reportController');
 
 /**
  * @desc    Créer une nouvelle vente
@@ -12,16 +14,22 @@ const { logActivity } = require('../middlewares/activityLogger');
  */
 const createSale = async (req, res, next) => {
   try {
+    console.log('Données reçues (POST /api/sales):', JSON.stringify(req.body, null, 2));
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Erreurs de validation:', errors.array());
+
+      // Construire un message d'erreur détaillé
+      const errorMessages = errors.array().map(err => `${err.path}: ${err.msg}`).join(', ');
       return res.status(400).json({
         success: false,
-        message: 'Données invalides',
+        message: `Données invalides: ${errorMessages}`,
         errors: errors.array()
       });
     }
 
-    const { customer, items, typeVente = 'detail' } = req.body;
+    const { customer = 'Client anonyme', items, typeVente = 'detail' } = req.body;
 
     // Valider le type de vente
     if (!['gros', 'detail'].includes(typeVente)) {
@@ -128,6 +136,18 @@ const createSale = async (req, res, next) => {
       saleId: sale._id,
       createdBy: req.user.id
     });
+
+    // Mettre à jour automatiquement les inventaires et rapports
+    try {
+      await upsertInventory('daily', req.user.id);
+      await upsertInventory('weekly', req.user.id);
+      await upsertInventory('monthly', req.user.id);
+      await upsertReport('sales', 'day', req.user.id);
+      await upsertReport('sales', 'month', req.user.id);
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour des inventaires/rapports:', error);
+      // Ne pas bloquer la vente si la mise à jour échoue
+    }
 
     res.status(201).json({
       success: true,
@@ -275,6 +295,17 @@ const updateSaleStatus = async (req, res, next) => {
     sale.status = status;
     await sale.save();
 
+    // Mettre à jour les inventaires et rapports
+    try {
+      await upsertInventory('daily', req.user.id);
+      await upsertInventory('weekly', req.user.id);
+      await upsertInventory('monthly', req.user.id);
+      await upsertReport('sales', 'day', req.user.id);
+      await upsertReport('sales', 'month', req.user.id);
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour des inventaires/rapports:', error);
+    }
+
     // Enregistrer l'activité
     await logActivity(
       req.user.id,
@@ -306,7 +337,7 @@ const getSalesStats = async (req, res, next) => {
     today.setHours(0, 0, 0, 0);
 
     const todaySales = await Sale.find({
-      status: 'completed',
+      status: { $ne: 'cancelled' },
       createdAt: { $gte: today }
     });
 
@@ -317,7 +348,7 @@ const getSalesStats = async (req, res, next) => {
     monthStart.setHours(0, 0, 0, 0);
 
     const monthSales = await Sale.find({
-      status: 'completed',
+      status: { $ne: 'cancelled' },
       createdAt: { $gte: monthStart }
     });
 
@@ -343,10 +374,81 @@ const getSalesStats = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Supprimer une vente
+ * @route   DELETE /api/sales/:id
+ * @access  Super Admin
+ */
+const deleteSale = async (req, res, next) => {
+  try {
+    const sale = await Sale.findById(req.params.id);
+
+    if (!sale) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vente non trouvée'
+      });
+    }
+
+    // Restaurer le stock des produits
+    for (const item of sale.items) {
+      await Product.findByIdAndUpdate(item.productId, {
+        $inc: { stock: item.quantity }
+      });
+
+      await StockMovement.create({
+        product: item.productId,
+        type: 'entry',
+        quantity: item.quantity,
+        previousStock: item.quantity,
+        newStock: 0,
+        reason: 'Suppression de vente',
+        user: req.user.id,
+        reference: sale._id.toString()
+      });
+    }
+
+    // Supprimer la facture associée
+    if (sale.invoiceId) {
+      await Invoice.findByIdAndDelete(sale.invoiceId);
+    }
+
+    await Sale.findByIdAndDelete(req.params.id);
+
+    // Recalculer les inventaires et rapports
+    try {
+      await upsertInventory('daily', req.user.id);
+      await upsertInventory('weekly', req.user.id);
+      await upsertInventory('monthly', req.user.id);
+      await upsertReport('sales', 'day', req.user.id);
+      await upsertReport('sales', 'month', req.user.id);
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour des inventaires/rapports:', error);
+    }
+
+    await logActivity(
+      req.user.id,
+      'delete_sale',
+      sale._id,
+      `${req.user.name} a supprimé la vente ${sale._id}`,
+      req.ip,
+      req.get('User-Agent')
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Vente supprimée avec succès'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createSale,
   getSales,
   getSale,
   updateSaleStatus,
-  getSalesStats
+  getSalesStats,
+  deleteSale
 };

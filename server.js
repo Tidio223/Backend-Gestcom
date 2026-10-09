@@ -43,12 +43,14 @@ const allowedOrigins = [
 app.use(cors({
   origin: (origin, callback) => {
     // Requêtes sans origine (curl, Postman) ou origines autorisées
-    if (!origin || allowedOrigins.includes(origin) || /^https:\/\/frontend-gestcom.*\.vercel\.app$/.test(origin)) {
+    if (!origin || allowedOrigins.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin)) {
       return callback(null, true);
     }
     return callback(new Error("Origine non autorisée par CORS"));
   },
-  credentials: true,
+  credentials: false, // Plus besoin de credentials avec localStorage
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Limiter le nombre de requêtes (rate limiting)
@@ -75,6 +77,8 @@ app.use('/api/products', require('./routes/products'));
 app.use('/api/sales', require('./routes/sales'));
 app.use('/api/invoices', require('./routes/invoices'));
 app.use('/api/financial', require('./routes/financial'));
+app.use('/api/inventories', require('./routes/inventories'));
+app.use('/api/reports', require('./routes/reports'));
 
 // Route de test
 app.get('/api', (req, res) => {
