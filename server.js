@@ -13,6 +13,12 @@ const seedProtectedAccounts = require('./config/seedProtectedAccounts');
 // Charger les variables d'environnement
 dotenv.config();
 
+// Vérifier les variables d'environnement critiques
+if (!process.env.SUPER_ADMIN_EMAIL) {
+  console.warn('\n⚠️  ATTENTION: SUPER_ADMIN_EMAIL non défini dans .env');
+  console.warn('   La suppression de produits, ventes, rapports et inventaires sera désactivée.\n');
+}
+
 // Connexion à la base de données si disponible
 connectDB().catch(() => {
   console.warn('Base de données indisponible, le serveur continuera en mode dégradé.');
@@ -79,6 +85,7 @@ app.use('/api/invoices', require('./routes/invoices'));
 app.use('/api/financial', require('./routes/financial'));
 app.use('/api/inventories', require('./routes/inventories'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/stockmovements', require('./routes/stockMovements'));
 
 // Route de test
 app.get('/api', (req, res) => {

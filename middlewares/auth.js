@@ -81,16 +81,17 @@ const requireSuperAdmin = (req, res, next) => {
     });
   }
 
-  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  const userEmail = req.user.email?.trim().toLowerCase();
   
   if (!superAdminEmail) {
-    return res.status(500).json({
+    return res.status(403).json({
       success: false,
-      message: 'Configuration serveur incorrecte : SUPER_ADMIN_EMAIL non défini'
+      message: 'Accès refusé - Configuration serveur incorrecte'
     });
   }
 
-  if (req.user.email !== superAdminEmail) {
+  if (userEmail !== superAdminEmail) {
     return res.status(403).json({
       success: false,
       message: 'Accès refusé - Action réservée au super administrateur'

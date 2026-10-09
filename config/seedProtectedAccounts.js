@@ -9,12 +9,12 @@ const User = require('../models/User');
 const seedProtectedAccounts = async () => {
   const adminEmail = process.env.ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD;
-  const superadminEmail = process.env.SUPERADMIN_EMAIL;
+  const superadminEmail = process.env.SUPER_ADMIN_EMAIL;
   const superadminPassword = process.env.SUPERADMIN_PASSWORD;
 
   if (!adminEmail || !adminPassword || !superadminEmail || !superadminPassword) {
     console.warn('Variables d\'environnement manquantes pour les comptes protégés');
-    console.log('ADMIN_EMAIL, ADMIN_PASSWORD, SUPERADMIN_EMAIL, SUPERADMIN_PASSWORD requis');
+    console.log('ADMIN_EMAIL, ADMIN_PASSWORD, SUPER_ADMIN_EMAIL, SUPERADMIN_PASSWORD requis');
     return;
   }
 
