@@ -25,6 +25,19 @@ const inventoryItemSchema = new mongoose.Schema({
   stockRemaining: {
     type: Number,
     default: 0
+  },
+  wholesalePrice: {
+    type: Number,
+    default: 0
+  },
+  retailPrice: {
+    type: Number,
+    default: 0
+  },
+  typeVente: {
+    type: String,
+    enum: ['gros', 'detail'],
+    default: 'detail'
   }
 });
 
@@ -47,11 +60,15 @@ const inventorySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  totalValue: {
+  totalProductsSold: {
     type: Number,
     default: 0
   },
-  totalProductsSold: {
+  stockValueWholesale: {
+    type: Number,
+    default: 0
+  },
+  stockValueRetail: {
     type: Number,
     default: 0
   },

@@ -61,45 +61,79 @@ const upsertInventory = async (type, userId) => {
   const { startDate, endDate, period } = getPeriodDates(type);
   const date = new Date(startDate);
 
+  // Récupérer TOUS les produits
+  const products = await Product.find({});
+  const productMap = new Map();
+
+  // Initialiser la map avec tous les produits
+  products.forEach(product => {
+    productMap.set(product._id.toString(), {
+      productId: product._id,
+      productName: product.name,
+      quantitySold: 0,
+      unitPrice: product.prixDetail || product.price || 0,
+      total: 0,
+      stockRemaining: product.stock || 0,
+      wholesalePrice: product.prixGros || product.price || 0,
+      retailPrice: product.prixDetail || product.price || 0,
+      typeVente: 'detail'
+    });
+  });
+
   // Récupérer les ventes de la période (toutes les ventes valides, pas annulées)
   const sales = await Sale.find({
     status: { $ne: 'cancelled' },
     createdAt: { $gte: startDate, $lte: endDate }
   }).populate('items.productId');
 
-  // Calculer les données de l'inventaire
-  const productMap = new Map();
   let totalSales = 0;
-  let totalValue = 0;
   let totalProductsSold = 0;
 
-  sales.forEach(sale => {
-    sale.items.forEach(item => {
-      const existing = productMap.get(item.productId._id.toString());
-      const quantity = item.quantity;
-      const total = item.total;
+  // Pour gérer les produits vendus à plusieurs prix, on utilise une map par (productId, typeVente, unitPrice)
+  const salesMap = new Map();
 
+  // Mettre à jour avec les ventes
+  sales.forEach(sale => {
+    const saleType = sale.typeVente || 'detail';
+    
+    sale.items.forEach(item => {
+      const productId = item.productId._id.toString();
+      const key = `${productId}_${saleType}_${item.unitPrice}`;
+      
+      const existing = salesMap.get(key);
+      
       if (existing) {
-        existing.quantitySold += quantity;
-        existing.total += total;
+        existing.quantitySold += item.quantity;
+        existing.total += item.total;
       } else {
-        productMap.set(item.productId._id.toString(), {
+        salesMap.set(key, {
           productId: item.productId._id,
           productName: item.productName,
-          quantitySold: quantity,
+          quantitySold: item.quantity,
           unitPrice: item.unitPrice,
-          total: total,
-          stockRemaining: item.productId.stock || 0
+          total: item.total,
+          stockRemaining: item.productId.stock || 0,
+          wholesalePrice: item.productId.prixGros || item.productId.price || 0,
+          retailPrice: item.productId.prixDetail || item.productId.price || 0,
+          typeVente: saleType
         });
       }
-
-      totalSales += total;
-      totalProductsSold += quantity;
+      
+      totalSales += item.total;
+      totalProductsSold += item.quantity;
     });
   });
 
-  const items = Array.from(productMap.values());
-  totalValue = items.reduce((sum, item) => sum + (item.stockRemaining * item.unitPrice), 0);
+  const items = Array.from(salesMap.values());
+
+  // Calculer la valeur du stock restant
+  let stockValueWholesale = 0;
+  let stockValueRetail = 0;
+  
+  products.forEach(product => {
+    stockValueWholesale += (product.stock || 0) * (product.prixGros || product.price || 0);
+    stockValueRetail += (product.stock || 0) * (product.prixDetail || product.price || 0);
+  });
 
   // Compter les produits en stock faible
   const lowStockProducts = await Product.countDocuments({
@@ -114,6 +148,12 @@ const upsertInventory = async (type, userId) => {
     ? (totalProductsSold / totalStock[0].total) * 100 
     : 0;
 
+  // Contrôle de cohérence
+  const itemsTotal = items.reduce((sum, item) => sum + item.total, 0);
+  if (Math.abs(itemsTotal - totalSales) > 1) {
+    console.error(`INVENTAIRE INCOHÉRENT: totalSales=${totalSales}, somme items=${itemsTotal}`);
+  }
+
   // Upsert l'inventaire
   const inventory = await Inventory.findOneAndUpdate(
     { date, type, period },
@@ -123,8 +163,9 @@ const upsertInventory = async (type, userId) => {
       period,
       items,
       totalSales,
-      totalValue,
       totalProductsSold,
+      stockValueWholesale,
+      stockValueRetail,
       lowStockProducts,
       stockRotation,
       createdBy: userId
