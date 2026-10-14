@@ -13,7 +13,12 @@ const errorHandler = (err, req, res, next) => {
 
   // Erreur Mongoose - Duplicate Key
   if (err.code === 11000) {
-    const message = 'Cette ressource existe déjà';
+    const field = Object.keys(err.keyValue || {})[0];
+    const value = field ? err.keyValue[field] : null;
+    console.error('Erreur de doublon MongoDB:', { code: err.code, keyValue: err.keyValue });
+    const message = field
+      ? `La valeur "${value}" existe déjà pour le champ "${field}"`
+      : 'Cette ressource existe déjà';
     error = { message, statusCode: 400 };
   }
 

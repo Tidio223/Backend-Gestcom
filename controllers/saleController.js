@@ -1,11 +1,14 @@
+const mongoose = require('mongoose');
 const Sale = require('../models/Sale');
 const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
 const Invoice = require('../models/Invoice');
+const FinancialTransaction = require('../models/FinancialTransaction');
 const { validationResult } = require('express-validator');
 const { logActivity } = require('../middlewares/activityLogger');
 const { upsertInventory } = require('./inventoryController');
 const { upsertReport } = require('./reportController');
+const { getNextInvoiceNumber } = require('../utils/invoiceNumber');
 
 /**
  * @desc    Créer une nouvelle vente
@@ -108,6 +111,49 @@ const createSale = async (req, res, next) => {
       });
     }
 
+    // Générer automatiquement la facture (numéro via compteur atomique, jamais réutilisé)
+    const currentYear = new Date().getFullYear();
+    let invoice = null;
+    let lastInvoiceError = null;
+
+    for (let attempt = 0; attempt < 3 && !invoice; attempt++) {
+      try {
+        const invoiceNumber = await getNextInvoiceNumber(currentYear);
+        invoice = await Invoice.create({
+          number: invoiceNumber,
+          client: customer,
+          date: sale.createdAt,
+          items: sale.items,
+          total: total,
+          status: 'paid',
+          typeVente: typeVente,
+          saleId: sale._id,
+          createdBy: req.user.id
+        });
+      } catch (error) {
+        lastInvoiceError = error;
+        // Ne réessayer qu'en cas de doublon sur le numéro
+        if (error.code !== 11000) break;
+        console.error(`Numéro de facture en doublon (tentative ${attempt + 1}/3):`, error.keyValue);
+      }
+    }
+
+    if (!invoice) {
+      // Annuler la vente : restaurer le stock et supprimer les mouvements et la vente
+      for (const item of sale.items) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { stock: item.quantity }
+        });
+      }
+      await StockMovement.deleteMany({ reference: sale._id.toString() });
+      await Sale.findByIdAndDelete(sale._id);
+      throw lastInvoiceError;
+    }
+
+    // Lier la vente à sa facture
+    sale.invoiceId = invoice._id;
+    await sale.save();
+
     // Enregistrer l'activité
     await logActivity(
       req.user.id,
@@ -117,25 +163,6 @@ const createSale = async (req, res, next) => {
       req.ip,
       req.get('User-Agent')
     );
-
-    // Générer automatiquement la facture
-    const currentYear = new Date().getFullYear();
-    const invoiceCount = await Invoice.countDocuments({
-      number: new RegExp(`^FAC-${currentYear}-`)
-    });
-    const invoiceNumber = `FAC-${currentYear}-${String(invoiceCount + 1).padStart(3, '0')}`;
-
-    const invoice = await Invoice.create({
-      number: invoiceNumber,
-      client: customer,
-      date: sale.createdAt,
-      items: sale.items,
-      total: total,
-      status: 'paid',
-      typeVente: typeVente,
-      saleId: sale._id,
-      createdBy: req.user.id
-    });
 
     // Mettre à jour automatiquement les inventaires et rapports
     try {
@@ -381,6 +408,13 @@ const getSalesStats = async (req, res, next) => {
  */
 const deleteSale = async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant de vente invalide'
+      });
+    }
+
     const sale = await Sale.findById(req.params.id);
 
     if (!sale) {
@@ -390,30 +424,45 @@ const deleteSale = async (req, res, next) => {
       });
     }
 
-    // Restaurer le stock des produits
-    for (const item of sale.items) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { stock: item.quantity }
+    // Transaction : si une étape échoue, rien n'est appliqué
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        // Restaurer le stock des produits
+        for (const item of sale.items) {
+          const product = await Product.findById(item.productId).session(session);
+          const previousStock = product ? product.stock : 0;
+          const newStock = previousStock + item.quantity;
+
+          await Product.findByIdAndUpdate(item.productId, {
+            $inc: { stock: item.quantity }
+          }, { session });
+
+          await StockMovement.create([{
+            product: item.productId,
+            type: 'entry',
+            quantity: item.quantity,
+            previousStock: previousStock,
+            newStock: newStock,
+            reason: `Annulation de la vente #${sale._id.toString().slice(-6)}`,
+            user: req.user.id,
+            reference: sale._id.toString()
+          }], { session });
+        }
+
+        // Supprimer la facture liée (dans les deux sens de référence)
+        await Invoice.deleteMany({
+          $or: [{ _id: sale.invoiceId }, { saleId: sale._id }]
+        }, { session });
+
+        // Supprimer la transaction financière liée le cas échéant
+        await FinancialTransaction.deleteMany({ reference: sale._id.toString() }, { session });
+
+        await Sale.findByIdAndDelete(req.params.id, { session });
       });
-
-      await StockMovement.create({
-        product: item.productId,
-        type: 'entry',
-        quantity: item.quantity,
-        previousStock: item.quantity,
-        newStock: 0,
-        reason: 'Suppression de vente',
-        user: req.user.id,
-        reference: sale._id.toString()
-      });
+    } finally {
+      session.endSession();
     }
-
-    // Supprimer la facture associée
-    if (sale.invoiceId) {
-      await Invoice.findByIdAndDelete(sale.invoiceId);
-    }
-
-    await Sale.findByIdAndDelete(req.params.id);
 
     // Recalculer les inventaires et rapports
     try {

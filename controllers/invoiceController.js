@@ -1,4 +1,5 @@
 const Invoice = require('../models/Invoice');
+const Sale = require('../models/Sale');
 const { logActivity } = require('../middlewares/activityLogger');
 
 /**
@@ -177,6 +178,11 @@ const deleteInvoice = async (req, res, next) => {
     }
 
     await Invoice.findByIdAndDelete(req.params.id);
+
+    // Détacher la facture de la vente associée (la vente, le stock et les rapports sont conservés)
+    if (invoice.saleId) {
+      await Sale.findByIdAndUpdate(invoice.saleId, { $unset: { invoiceId: 1 } });
+    }
 
     // Enregistrer l'activité
     await logActivity(
