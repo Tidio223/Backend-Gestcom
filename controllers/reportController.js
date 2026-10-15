@@ -94,8 +94,9 @@ const upsertReport = async (type, period, userId) => {
 
       summary.totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
       summary.totalProducts = sales.reduce((sum, sale) => sum + sale.items.reduce((s, item) => s + item.quantity, 0), 0);
-      summary.totalCustomers = sales.length;
-      summary.averageOrderValue = sales.length > 0 ? summary.totalRevenue / sales.length : 0;
+      summary.totalSales = sales.length;
+      summary.totalCustomers = new Set(sales.map(sale => sale.customer)).size;
+      summary.averageOrderValue = sales.length > 0 ? Math.round(summary.totalRevenue / sales.length) : 0;
 
       // Top produits
       const productSales = new Map();
