@@ -81,6 +81,11 @@ const reportSchema = new mongoose.Schema({
       revenue: Number
     }]
   },
+  // Bilan du stock au prix de gros (montantOuverture, montantEntrees,
+  // montantInventaire, montantStockActuel, montantStockReel, ecartStock)
+  bilanStock: {
+    type: mongoose.Schema.Types.Mixed
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

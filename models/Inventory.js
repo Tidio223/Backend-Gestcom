@@ -80,6 +80,25 @@ const inventorySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Bilan du stock au prix de gros (enregistré à la génération, jamais recalculé)
+  montantOuverture: {
+    type: Number
+  },
+  montantEntrees: {
+    type: Number
+  },
+  montantInventaire: {
+    type: Number
+  },
+  montantStockActuel: {
+    type: Number
+  },
+  montantStockReel: {
+    type: Number
+  },
+  ecartStock: {
+    type: Number
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

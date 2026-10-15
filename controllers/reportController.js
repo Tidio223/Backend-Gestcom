@@ -2,6 +2,7 @@ const Report = require('../models/Report');
 const Sale = require('../models/Sale');
 const Product = require('../models/Product');
 const { logActivity } = require('../middlewares/activityLogger');
+const { computeStockBalance } = require('../utils/stockBalance');
 
 /**
  * Helper pour obtenir la date en fuseau Africa/Bamako (UTC+0)
@@ -176,6 +177,14 @@ const upsertReport = async (type, period, userId) => {
 
   const title = `Rapport ${type === 'sales' ? 'de Ventes' : type === 'inventory' ? 'd\'Inventaire' : type === 'customers' ? 'Clients' : 'Financier'} - ${periodLabel}`;
 
+  // Bilan du stock au prix de gros (rapports ventes et inventaire),
+  // chaîné sur l'inventaire de la granularité correspondante
+  let bilanStock = null;
+  if (type === 'sales' || type === 'inventory') {
+    const inventoryType = { day: 'daily', week: 'weekly', month: 'monthly' }[period] || null;
+    bilanStock = await computeStockBalance(inventoryType, startDate, endDate);
+  }
+
   // Upsert le rapport
   const report = await Report.findOneAndUpdate(
     { date, type, period },
@@ -188,6 +197,7 @@ const upsertReport = async (type, period, userId) => {
       endDate,
       data,
       summary,
+      bilanStock,
       createdBy: userId
     },
     { upsert: true, new: true }

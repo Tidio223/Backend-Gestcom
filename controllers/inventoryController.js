@@ -3,6 +3,7 @@ const Sale = require('../models/Sale');
 const Product = require('../models/Product');
 const mongoose = require('mongoose');
 const { logActivity } = require('../middlewares/activityLogger');
+const { computeStockBalance } = require('../utils/stockBalance');
 
 /**
  * Helper pour obtenir la date en fuseau Africa/Bamako (UTC+0)
@@ -16,8 +17,8 @@ const getBamakoDate = () => {
 /**
  * Helper pour obtenir les dates de période
  */
-const getPeriodDates = (type) => {
-  const now = getBamakoDate();
+const getPeriodDates = (type, referenceDate) => {
+  const now = new Date(referenceDate || getBamakoDate());
   let startDate, endDate, period;
 
   switch (type) {
@@ -57,8 +58,8 @@ const getPeriodDates = (type) => {
 /**
  * Upsert un inventaire (créer ou mettre à jour)
  */
-const upsertInventory = async (type, userId) => {
-  const { startDate, endDate, period } = getPeriodDates(type);
+const upsertInventory = async (type, userId, referenceDate) => {
+  const { startDate, endDate, period } = getPeriodDates(type, referenceDate);
   const date = new Date(startDate);
 
   // Récupérer TOUS les produits
@@ -92,28 +93,29 @@ const upsertInventory = async (type, userId) => {
   // Pour gérer les produits vendus à plusieurs prix, on utilise une map par (productId, typeVente, unitPrice)
   const salesMap = new Map();
 
-  // Mettre à jour avec les ventes
+  // Mettre à jour avec les ventes (toutes les lignes valorisées au prix de gros)
   sales.forEach(sale => {
     const saleType = sale.typeVente || 'detail';
     
     sale.items.forEach(item => {
       const productId = item.productId._id.toString();
-      const key = `${productId}_${saleType}_${item.unitPrice}`;
+      const wholesale = item.productId.prixGros || item.productId.price || 0;
+      const key = `${productId}_${saleType}`;
       
       const existing = salesMap.get(key);
       
       if (existing) {
         existing.quantitySold += item.quantity;
-        existing.total += item.total;
+        existing.total += item.quantity * wholesale;
       } else {
         salesMap.set(key, {
           productId: item.productId._id,
           productName: item.productName,
           quantitySold: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.total,
+          unitPrice: wholesale,
+          total: item.quantity * wholesale,
           stockRemaining: item.productId.stock || 0,
-          wholesalePrice: item.productId.prixGros || item.productId.price || 0,
+          wholesalePrice: wholesale,
           retailPrice: item.productId.prixDetail || item.productId.price || 0,
           typeVente: saleType
         });
@@ -148,10 +150,14 @@ const upsertInventory = async (type, userId) => {
     ? (totalProductsSold / totalStock[0].total) * 100 
     : 0;
 
-  // Contrôle de cohérence
+  // Bilan du stock au prix de gros (ouverture chaînée, entrées, sorties, écart)
+  const bilan = await computeStockBalance(type, startDate, endDate);
+
+  // Contrôle de cohérence : le montant de l'inventaire doit être exactement
+  // la somme des lignes du tableau de détail (au prix de gros)
   const itemsTotal = items.reduce((sum, item) => sum + item.total, 0);
-  if (Math.abs(itemsTotal - totalSales) > 1) {
-    console.error(`INVENTAIRE INCOHÉRENT: totalSales=${totalSales}, somme items=${itemsTotal}`);
+  if (Math.abs(itemsTotal - bilan.montantInventaire) > 1) {
+    console.error(`INVENTAIRE INCOHÉRENT: montantInventaire=${bilan.montantInventaire}, somme items=${itemsTotal}`);
   }
 
   // Upsert l'inventaire
@@ -168,12 +174,25 @@ const upsertInventory = async (type, userId) => {
       stockValueRetail,
       lowStockProducts,
       stockRotation,
+      ...bilan,
       createdBy: userId
     },
     { upsert: true, new: true }
   );
 
   return inventory;
+};
+
+/**
+ * Recalcule tous les inventaires d'un type, du plus ancien au plus récent.
+ * Chaque document est régénéré (lignes au prix de gros + bilan), l'ouverture
+ * de chacun reprenant la clôture recalculée du précédent.
+ */
+const rebuildInventoryChain = async (type, userId) => {
+  const inventories = await Inventory.find({ type }).sort({ date: 1 });
+  for (const inventory of inventories) {
+    await upsertInventory(type, inventory.createdBy || userId, inventory.date);
+  }
 };
 
 /**
@@ -246,6 +265,13 @@ const deleteInventory = async (req, res, next) => {
 
     await Inventory.findByIdAndDelete(req.params.id);
 
+    // Recalculer en cascade les inventaires suivants du même type
+    try {
+      await rebuildInventoryChain(inventory.type, req.user.id);
+    } catch (error) {
+      console.error('Erreur lors du recalcul de la chaîne des inventaires:', error);
+    }
+
     await logActivity(
       req.user.id,
       'delete_inventory',
@@ -301,6 +327,8 @@ const regenerateInventories = async (req, res, next) => {
     for (const type of types) {
       const inventory = await upsertInventory(type, req.user.id);
       results.push(inventory);
+      // Recalculer en cascade tous les inventaires du type (ancien -> récent)
+      await rebuildInventoryChain(type, req.user.id);
     }
 
     await logActivity(
